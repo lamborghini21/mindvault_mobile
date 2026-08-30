@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
@@ -47,6 +48,7 @@ export function PublisherResourcesScreen() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [checkingStoredKey, setCheckingStoredKey] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [authenticated, setAuthenticated] = useState(false);
@@ -268,30 +270,13 @@ export function PublisherResourcesScreen() {
   }, [colors, shared, typography]);
 
   useEffect(() => {
-    const loadStoredKey = async () => {
-      try {
-        const stored = await getStoredApiKey();
-        if (stored) {
-          setStoredApiKey(stored);
-          setAuthenticated(true);
-          await loadResources(stored);
-        }
-      } catch (err) {
-        console.error("Failed to load stored API key:", err);
-      }
-    };
-
-    void loadStoredKey();
-  }, []);
-
-  useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 2500);
     return () => clearTimeout(timer);
   }, [toast]);
 
   const loadResources = useCallback(
-    async (key: string, isRefresh = false) => {
+    async (key: string, isRefresh = false, searchTerm?: string) => {
       if (isRefresh) {
         setRefreshing(true);
       } else {
@@ -300,19 +285,42 @@ export function PublisherResourcesScreen() {
       setError(null);
 
       try {
-        const data = await fetchPublisherResources(key, search || undefined);
+        const data = await fetchPublisherResources(key, searchTerm || undefined);
         setResources(data);
+        return true;
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Failed to fetch publisher resources";
         setError(message);
+        return false;
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [search]
+    []
   );
+
+  useEffect(() => {
+    const loadStoredKey = async () => {
+      try {
+        const stored = await getStoredApiKey();
+        if (stored) {
+          setStoredApiKey(stored);
+          const loaded = await loadResources(stored);
+          if (loaded) {
+            setAuthenticated(true);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load stored API key:", err);
+      } finally {
+        setCheckingStoredKey(false);
+      }
+    };
+
+    void loadStoredKey();
+  }, [loadResources]);
 
   const handleSaveApiKey = async () => {
     if (!apiKey.trim()) {
@@ -339,6 +347,11 @@ export function PublisherResourcesScreen() {
     }
   };
 
+  const handleApiKeyChange = (value: string) => {
+    setApiKey(value);
+    setError(null);
+  };
+
   const handleLogout = async () => {
     try {
       await deleteStoredApiKey();
@@ -355,7 +368,7 @@ export function PublisherResourcesScreen() {
 
   const handleRefresh = async () => {
     if (storedApiKey) {
-      await loadResources(storedApiKey, true);
+      await loadResources(storedApiKey, true, search);
     }
   };
 
@@ -396,8 +409,26 @@ export function PublisherResourcesScreen() {
   const filteredResources = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return resources;
-    return resources.filter((resource) => resource.title.toLowerCase().includes(query));
+    return resources.filter((resource) =>
+      [
+        resource.title,
+        resource.publisherName,
+        resource.walletAddress,
+        resource.resourceType,
+        resource.accessUrl,
+      ].some((value) => value?.toLowerCase().includes(query))
+    );
   }, [resources, search]);
+
+  const renderStoredKeyLoading = () => (
+    <SafeAreaView style={shared.screen} edges={["top", "left", "right"]}>
+      <StatusBar style="dark" />
+      <View style={[styles.container, styles.emptyState]}>
+        <ActivityIndicator color={colors.primary} size="large" />
+        <Text style={styles.emptyBody}>Checking saved API key…</Text>
+      </View>
+    </SafeAreaView>
+  );
 
   const renderAuthForm = () => (
     <SafeAreaView style={shared.screen} edges={["top", "left", "right"]}>
@@ -411,7 +442,7 @@ export function PublisherResourcesScreen() {
             <Text style={styles.label}>API Key</Text>
             <TextInput
               value={apiKey}
-              onChangeText={setApiKey}
+              onChangeText={handleApiKeyChange}
               placeholder="Enter your API key…"
               placeholderTextColor={colors.textSubtle}
               secureTextEntry
@@ -581,6 +612,8 @@ export function PublisherResourcesScreen() {
       ) : null}
     </SafeAreaView>
   );
+
+  if (checkingStoredKey) return renderStoredKeyLoading();
 
   return authenticated ? renderResourcesList() : renderAuthForm();
 }
