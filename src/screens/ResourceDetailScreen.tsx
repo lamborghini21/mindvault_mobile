@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -88,8 +89,8 @@ function createStyles(colors: ThemeColors) {
       fontWeight: "500",
     },
     content: {
-      flex: 1,
       padding: spacing.lg,
+      paddingBottom: spacing.xxl,
       gap: spacing.md,
     },
     price: {
@@ -271,7 +272,7 @@ export function ResourceDetailScreen({ route, navigation }: Props) {
 
   return (
     <SafeAreaView style={shared.screen} edges={["bottom"]}>
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         <Text style={typography.subtitle}>Resource</Text>
         <Text style={typography.title}>{resource.title}</Text>
 
@@ -358,7 +359,7 @@ export function ResourceDetailScreen({ route, navigation }: Props) {
         >
           <Text style={shared.buttonText}>Share Access URL</Text>
         </Pressable>
-      </View>
+      </ScrollView>
 
       {toast ? (
         <View style={styles.toast}>
